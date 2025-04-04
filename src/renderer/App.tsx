@@ -1,50 +1,45 @@
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import icon from '../../assets/icon.svg';
+import SideBar from './components/NavBar';
+import SerialPortList from './components/SerialPortList';
+import NotificationComponent from './components/Notifications';
+import MachineStatus from './components/MachineStatus';
 import './App.css';
+import 'react-toastify/dist/ReactToastify.css';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { Grid } from '@mui/material';
+import Control from './components/Control';
+import Parameters from './components/Parameters';
+import BasicLineChart from './components/Graph';
+import Dashboard from './Dashboard';
+import Connect from './Connect';
+import MachineConfigPage from './MachineConfig';
+import TestProfileForm from './TestProfile';
 
-function Hello() {
-  return (
-    <div>
-      <div className="Hello">
-        <img width="200" alt="icon" src={icon} />
-      </div>
-      <h1>electron-react-boilerplate</h1>
-      <div className="Hello">
-        <a
-          href="https://electron-react-boilerplate.js.org/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <button type="button">
-            <span role="img" aria-label="books">
-              📚
-            </span>
-            Read our docs
-          </button>
-        </a>
-        <a
-          href="https://github.com/sponsors/electron-react-boilerplate"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <button type="button">
-            <span role="img" aria-label="folded hands">
-              🙏
-            </span>
-            Donate
-          </button>
-        </a>
-      </div>
-    </div>
-  );
-}
+
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+  },
+});
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Hello />} />
-      </Routes>
-    </Router>
+    <ThemeProvider theme={darkTheme}>
+      <Router>
+        <SideBar>
+          <NotificationComponent />
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/connect" element={<Connect />} />
+            <Route path="/config" element={<MachineConfigPage />} />
+            <Route path="/create" element={<TestProfileForm />} />
+          </Routes>
+        </SideBar>
+      </Router>
+    </ThemeProvider>
   );
 }

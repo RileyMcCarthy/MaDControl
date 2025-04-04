@@ -14,6 +14,11 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
+import SerialPortHandler from './handlers/SerialPortHandler';
+import DataProcessor from './handlers/DataProcessor';
+import NotificationSender from './handlers/NotificationSender';
+import DeviceInterface from './handlers/DeviceInterface';
+import { initializeSampleProfiles, cleanup as cleanupSampleProfiles } from './sampleProfiles';
 
 class AppUpdater {
   constructor() {
@@ -25,12 +30,6 @@ class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
-
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
   sourceMapSupport.install();
@@ -40,7 +39,7 @@ const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 if (isDebug) {
-  require('electron-debug')();
+  require('electron-debug').default();
 }
 
 const installExtensions = async () => {
@@ -82,8 +81,7 @@ const createWindow = async () => {
   });
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
-
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.on('ready-to-show', async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
@@ -98,6 +96,17 @@ const createWindow = async () => {
     mainWindow = null;
   });
 
+  const notificationSender = new NotificationSender(mainWindow);
+  const serialPortHandler = new SerialPortHandler();
+  const dataProcessor = new DataProcessor(serialPortHandler);
+  const deviceInterface = new DeviceInterface(
+    dataProcessor,
+    notificationSender,
+    serialPortHandler,
+    mainWindow,
+  );
+  serialPortHandler.connect('/tmp/tty.rpi', 115200); // for debugging, should either remember settings or start at settings page
+
   const menuBuilder = new MenuBuilder(mainWindow);
   menuBuilder.buildMenu();
 
@@ -110,6 +119,8 @@ const createWindow = async () => {
   // Remove this if your app does not use auto updates
   // eslint-disable-next-line
   new AppUpdater();
+
+  initializeSampleProfiles();
 };
 
 /**
@@ -117,11 +128,11 @@ const createWindow = async () => {
  */
 
 app.on('window-all-closed', () => {
-  // Respect the OSX convention of having the application in memory even
-  // after all windows have been closed
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  cleanupSampleProfiles().then(() => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
 });
 
 app

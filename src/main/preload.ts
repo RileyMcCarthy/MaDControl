@@ -21,6 +21,12 @@ const electronHandler = {
     once(channel: Channels, func: (...args: unknown[]) => void) {
       ipcRenderer.once(channel, (_event, ...args) => func(...args));
     },
+    sendSync(channel: Channels, args: unknown[]) {
+      return ipcRenderer.sendSync(channel, args);
+    },
+    invoke: (channel: Channels, ...args: unknown[]) => {
+      return ipcRenderer.invoke(channel, ...args);
+    },
   },
 };
 
