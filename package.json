@@ -194,8 +194,6 @@
       "package.json"
     ],
     "mac": {
-      "sign": ".erb/scripts/notarize.js",
-      "notarize": false,
       "target": {
         "target": "default",
         "arch": [
@@ -209,20 +207,6 @@
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "gatekeeperAssess": false
     },
-    "dmg": {
-      "contents": [
-        {
-          "x": 130,
-          "y": 220
-        },
-        {
-          "x": 410,
-          "y": 220,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
-    },
     "win": {
       "target": [
         "nsis"
@@ -230,9 +214,12 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb",
+        "rpm"
       ],
-      "category": "Development"
+      "category": "Development",
+      "icon": "assets/icon.png"
     },
     "directories": {
       "app": "release/app",
