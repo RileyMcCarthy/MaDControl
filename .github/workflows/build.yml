@@ -36,8 +36,20 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Install Ubuntu dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 make gcc g++
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Rebuild native modules
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npm rebuild
+          npm run rebuild
 
       - name: Build
         run: npm run build
@@ -84,6 +96,11 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Rebuild native modules
+        run: |
+          npm rebuild
+          npm run rebuild
 
       - name: Build
         run: npm run build
