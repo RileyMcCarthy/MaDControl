@@ -33,88 +33,22 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Configure node-gyp (Windows)
-        if: matrix.os == 'windows-latest'
-        run: npm config set python "$(which python)"
-
-      - name: Configure node-gyp (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          python_path=$(which python3)
-          echo "Using Python at: $python_path"
-          npm config set python "$python_path"
-          npm config set node_gyp "$PWD/node_modules/node-gyp/bin/node-gyp.js"
-
-      - name: Install Ubuntu dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential python3 make gcc g++
-
-      - name: Install dependencies
+          - name: Install dependencies
         run: npm install --legacy-peer-deps
-
-      - name: Install node-gyp
-        run: npm install node-gyp@latest --save-dev
-
-      - name: Update node-abi
-        run: npm install node-abi@latest --save-dev
-
-      - name: Install styled-components
-        run: npm install styled-components --save
 
       - name: Rebuild native modules
         if: matrix.os == 'ubuntu-latest'
         run: |
-          echo "Rebuilding native modules with NODE_GYP_FORCE_PYTHON=$(which python3)"
-          export NODE_GYP_FORCE_PYTHON=$(which python3)
           npm rebuild
           npm run rebuild
-
-      - name: Rebuild native modules (macOS/Windows)
-        if: matrix.os != 'ubuntu-latest'
-        run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            export PYTHON=$(which python3)
-            echo "Using Python at: $PYTHON"
-            # Use npm for rebuild with explicit environment
-            PYTHON=$(which python3) npm rebuild
-            PYTHON=$(which python3) npm run rebuild
-          else
-            npm rebuild
-            npm run rebuild
-          fi
 
       - name: Build
         run: npm run build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Diagnostic (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          echo "Diagnostic information for macOS:"
-          which python3
-          python3 --version
-          echo "NODE_GYP_FORCE_PYTHON=$NODE_GYP_FORCE_PYTHON"
-          npm config list
-          ls -la node_modules/node-gyp
-          cat node_modules/node-gyp/package.json
-
       - name: Package
-        run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            export PYTHON=$(which python3)
-            echo "Using Python at: $PYTHON for packaging"
-            PYTHON=$PYTHON npm run package
-          else
-            npm run package
-          fi
+        run: npm run package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_ARCH: ${{ matrix.arch }}
@@ -156,25 +90,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Configure node-gyp
-        run: npm config set python "$(which python3)"
+      - name: Install Python dependencies
+        run: |
+          pip install setuptools
+          # distutils is part of setuptools in newer Python versions
+          python -m pip install --upgrade pip
+          python -c "import setuptools; print(setuptools.__version__)"
+          # Explicitly install setuptools-distutils compatibility layer
+          pip install setuptools-distutils
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Install node-gyp
-        run: npm install node-gyp@latest --save-dev
-
-      - name: Update node-abi
-        run: npm install node-abi@latest --save-dev
-
-      - name: Install styled-components
-        run: npm install styled-components --save
-
       - name: Rebuild native modules
         run: |
-          echo "Rebuilding native modules with NODE_GYP_FORCE_PYTHON=$(which python3)"
-          export NODE_GYP_FORCE_PYTHON=$(which python3)
           npm rebuild
           npm run rebuild
 
@@ -184,10 +113,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package
-        run: |
-          export PYTHON=$(which python3)
-          echo "Using Python at: $PYTHON for packaging"
-          PYTHON=$PYTHON npm run package
+        run: npm run package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_ARCH: ${{ matrix.arch }}
