@@ -37,10 +37,13 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential python3 make gcc g++
+          sudo apt-get install -y libudev-dev libusb-1.0-0-dev
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
+
+      - name: Update node-abi for Electron 35.x compatibility
+        run: npm install node-abi@latest --save-dev
 
       - name: Rebuild native modules
         if: matrix.os == 'ubuntu-latest'
@@ -93,6 +96,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Update node-abi
+        run: npm install node-abi@latest --save-dev
 
       - name: Rebuild native modules
         run: |
