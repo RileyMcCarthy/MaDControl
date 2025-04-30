@@ -33,7 +33,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-          - name: Install dependencies
+      - name: Install Ubuntu dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 make gcc g++
+
+      - name: Install dependencies
         run: npm install --legacy-peer-deps
 
       - name: Rebuild native modules
@@ -84,20 +90,6 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install Python dependencies
-        run: |
-          pip install setuptools
-          # distutils is part of setuptools in newer Python versions
-          python -m pip install --upgrade pip
-          python -c "import setuptools; print(setuptools.__version__)"
-          # Explicitly install setuptools-distutils compatibility layer
-          pip install setuptools-distutils
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
