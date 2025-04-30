@@ -116,7 +116,7 @@
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.3.0",
     "react-toastify": "^10.0.5",
-    "styled-components": "^6.1.17"
+    "styled-components": "^6.1.8"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
