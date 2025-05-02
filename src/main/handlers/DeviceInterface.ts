@@ -1,18 +1,24 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import EventEmitter from 'events';
-import { DataProcessor, ReadType, WriteType } from './DataProcessor';
-import NotificationSender from './NotificationSender';
-import SerialPortHandler from './SerialPortHandler';
-import { BrowserWindow } from 'electron';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import {
   MachineState,
   SampleData,
   MachineConfiguration,
   Notification,
   NotificationType,
-  Move,
-  TestHeader,
+  FirmwareVersion,
 } from '../../shared/SharedInterface';
+import DataProcessor, { ReadType, WriteType } from './DataProcessor';
+import NotificationSender from './NotificationSender';
+import SerialPortHandler from './SerialPortHandler';
+import {
+  getLatestFirmwareVersion,
+  downloadLatestArtifact,
+} from '../utils/GithubDownloader';
 
 function emitAndWaitForResponse(
   emitter: EventEmitter,
@@ -74,6 +80,8 @@ class DeviceInterface {
   private sample_interval_ms: number;
 
   private last_sample_data_ms: number;
+
+  private firmwareVersion: FirmwareVersion | null = null;
 
   constructor(
     dataProcessor: DataProcessor,
@@ -137,7 +145,7 @@ class DeviceInterface {
     });
 
     ipcMain.handle('get-machine-configuration', async () => {
-      console.log("Getting Machine Configuration");
+      console.log('Getting Machine Configuration');
       this.dataProcessor.readData(ReadType.MACHINE_CONFIGURATION);
       return waitForResponse(ipcMain, 'machine-configuration-updated', 1000);
     });
@@ -147,7 +155,7 @@ class DeviceInterface {
           WriteType.MACHINE_CONFIGURATION,
           Buffer.from(JSON.stringify(newConfig)),
         );
-        console.log("Saving Machine Configuration: ", newConfig);
+        console.log('Saving Machine Configuration: ', newConfig);
         return true;
       },
     );
@@ -161,17 +169,13 @@ class DeviceInterface {
     });
 
     ipcMain.handle('manual-move', async (event, mm: number, speed: number) => {
-      const move: Move = {
-        G: 0,
-        X: mm,
-        F: speed,
-        P: 0,
-      };
+      // Using a simplified G-code like format for manual moves
+      // The actual Move interface doesn't match what's used here, but this format works with the device
       const moveString = `{
-        "G": ${move.G},
-        "X": ${move.X.toFixed(6)},
-        "F": ${move.F.toFixed(6)},
-        "P": ${move.P}
+        "G": 0,
+        "X": ${mm.toFixed(6)},
+        "F": ${speed.toFixed(6)},
+        "P": 0
       }`;
       const incrementalMove = `{"G":91}`;
       this.dataProcessor.writeData(
@@ -263,6 +267,116 @@ class DeviceInterface {
       streamGcode().catch(console.error);
 
       return true;
+    });
+
+    // Firmware update related IPC handlers
+    ipcMain.handle('get-firmware-version', async () => {
+      try {
+        // Request firmware version from device
+        console.log('Getting Firmware Version');
+        this.dataProcessor.readData(ReadType.FIRMWARE_VERSION);
+
+        // Wait for response with timeout
+        return await waitForResponse(ipcMain, 'firmware-version-response', 3000);
+      } catch (error) {
+        console.error('Error getting firmware version:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('get-latest-firmware-version', async () => {
+      try {
+        // Hardcoded GitHub repo for firmware
+        const firmwareRepo = 'RileyMcCarthy/MaD-Firmware';
+        return await getLatestFirmwareVersion(firmwareRepo);
+      } catch (error) {
+        console.error('Error getting latest firmware version:', error);
+        return null;
+      }
+    });
+
+    ipcMain.handle('update-firmware', async () => {
+      try {
+        if (!this.device_connected) {
+          return {
+            success: false,
+            error: 'Device not connected',
+          };
+        }
+
+        const port = this.serialport.getCurrentPath();
+        if (!port) {
+          return {
+            success: false,
+            error: 'No serial port connected',
+          };
+        }
+
+        // Send notification that update is starting
+        this.notificationSender.sendNotification({
+          Type: NotificationType.INFO,
+          Message: 'Starting firmware update process...',
+        });
+
+        // Hardcoded GitHub repo for firmware
+        const firmwareRepo = 'RileyMcCarthy/MaD-Firmware';
+
+        // Create a temp directory for firmware files
+        const tempDir = path.join(os.tmpdir(), 'mad-firmware-update');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        // Download the latest firmware directly using downloadLatestArtifact
+        const firmwareResult = await downloadLatestArtifact({
+          repoUrl: firmwareRepo,
+          artifactExtension: '.bin',  // Prefer binary files for firmware
+          outputDir: tempDir,
+          window: this.window,
+          progressEvent: 'firmware-update-progress',
+          errorEvent: 'firmware-update-error'
+        });
+
+        if (!firmwareResult.success || !firmwareResult.filePath) {
+          this.notificationSender.sendNotification({
+            Type: NotificationType.ERROR,
+            Message: `Firmware download failed: ${firmwareResult.error || 'Unknown error'}`,
+          });
+          return firmwareResult;
+        }
+
+        // Flash the firmware
+        const flashResult = await this.flashFirmware(firmwareResult.filePath);
+
+        // Clean up downloaded files
+        this.cleanupTempDir(tempDir);
+
+        if (flashResult.success) {
+          this.notificationSender.sendNotification({
+            Type: NotificationType.SUCCESS,
+            Message: 'Firmware updated successfully!',
+          });
+        } else {
+          this.notificationSender.sendNotification({
+            Type: NotificationType.ERROR,
+            Message: `Firmware update failed: ${flashResult.error}`,
+          });
+        }
+
+        return flashResult;
+      } catch (error) {
+        console.error('Error updating firmware:', error);
+
+        this.notificationSender.sendNotification({
+          Type: NotificationType.ERROR,
+          Message: `Firmware update error: ${error}`,
+        });
+
+        return {
+          success: false,
+          error: `Unexpected error: ${error}`,
+        };
+      }
     });
 
     // Handle command acks
@@ -362,6 +476,10 @@ class DeviceInterface {
             this.machine_configuration,
           );
           break;
+        case ReadType.FIRMWARE_VERSION:
+          this.firmwareVersion = dataJSON as FirmwareVersion;
+          ipcMain.emit('firmware-version-response', this.firmwareVersion.version);
+          break;
         default:
       }
     });
@@ -386,6 +504,212 @@ class DeviceInterface {
           console.log('message type unknown');
       }
     });
+  }
+
+  /**
+   * Flash firmware to the device
+   * @param firmwarePath Path to firmware file to flash
+   */
+  public async flashFirmware(firmwarePath: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Close serial connection before flashing
+      await this.closeSerialPort();
+
+      this.sendProgressMessage('Preparing to flash firmware...');
+
+      // Get the loadp2 binary path from the local bin directory
+      const loadp2BinaryName = (() => {
+        if (process.platform === 'win32') return 'loadp2.exe';
+        if (process.platform === 'darwin') return 'loadp2.mac';
+        return 'loadp2'; // Linux/others
+      })();
+      const loadp2Path = path.join(process.cwd(), 'bin', loadp2BinaryName);
+
+      // Check if the loadp2 binary exists
+      if (!fs.existsSync(loadp2Path)) {
+        return {
+          success: false,
+          error: `LoadP2 tool not found at ${loadp2Path}. Please make sure it's installed in the bin directory.`
+        };
+      }
+
+      // Make sure the binary is executable (on Unix systems)
+      if (process.platform !== 'win32') {
+        try {
+          fs.chmodSync(loadp2Path, '755');
+          this.sendProgressMessage(`Made ${loadp2Path} executable`);
+        } catch (err) {
+          console.warn(`Unable to make ${loadp2Path} executable:`, err);
+        }
+      }
+
+      // Flash the firmware
+      return this.flashWithLoadP2(loadp2Path, firmwarePath, this.serialport.getCurrentPath() || '');
+
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error('Error in firmware flashing:', error);
+
+      return {
+        success: false,
+        error: `Error flashing firmware: ${error}`
+      };
+    }
+  }
+
+  /**
+   * Flash firmware using the LoadP2 tool
+   */
+  private flashWithLoadP2(
+    loadp2Path: string,
+    firmwarePath: string,
+    port: string
+  ): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      this.window.webContents.send(
+        'firmware-update-progress',
+        `Using LoadP2 tool to flash firmware...`
+      );
+
+      // Check if file exists and has content
+      try {
+        const stats = fs.statSync(firmwarePath);
+        this.window.webContents.send(
+          'firmware-update-progress',
+          `Binary size: ${stats.size} bytes`
+        );
+
+        if (stats.size === 0) {
+          this.window.webContents.send(
+            'firmware-update-error',
+            'Error: Firmware file is empty'
+          );
+          return resolve({
+            success: false,
+            error: 'Firmware binary file is empty'
+          });
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        this.window.webContents.send(
+          'firmware-update-error',
+          `Error accessing firmware file: ${errorMsg}`
+        );
+        return resolve({
+          success: false,
+          error: `Error accessing firmware binary: ${errorMsg}`
+        });
+      }
+
+      // Command to flash firmware with loadp2
+      const cmdArgs = [
+        '-b230400',        // Baud rate
+        '-p', port,        // Port
+        firmwarePath       // Firmware binary path
+      ];
+
+      this.window.webContents.send(
+        'firmware-update-progress',
+        `Running command: ${loadp2Path} ${cmdArgs.join(' ')}`
+      );
+
+      const flashProcess = spawn(loadp2Path, cmdArgs);
+
+      let output = '';
+      let errorOutput = '';
+
+      flashProcess.stdout.on('data', (data) => {
+        const message = data.toString();
+        output += message;
+        console.log(`LoadP2 stdout: ${message}`);
+        this.window.webContents.send('firmware-update-progress', message);
+      });
+
+      flashProcess.stderr.on('data', (data) => {
+        const message = data.toString();
+        errorOutput += message;
+        console.error(`LoadP2 stderr: ${message}`);
+        this.window.webContents.send('firmware-update-error', message);
+      });
+
+      flashProcess.on('close', (code) => {
+        console.log(`LoadP2 process exited with code ${code}`);
+
+        // Reconnect to the serial port after the update
+        setTimeout(() => {
+          this.serialport.connect(port, this.serialport.getCurrentBaudRate() || 115200);
+        }, 2000); // Wait 2 seconds before reconnecting
+
+        if (code === 0) {
+          this.window.webContents.send(
+            'firmware-update-progress',
+            'Firmware flashed successfully!'
+          );
+          resolve({ success: true });
+        } else {
+          // Provide helpful error message based on the error output
+          let errorMessage = `LoadP2 exited with code ${code}.`;
+
+          if (errorOutput.includes('cannot open serial port')) {
+            errorMessage = 'Error: Cannot open serial port. The port may be in use or you may need permission to access it.';
+          } else if (errorOutput.includes('No such file or directory')) {
+            errorMessage = 'Error: Could not find the firmware file.';
+          } else if (errorOutput.toLowerCase().includes('permission denied')) {
+            errorMessage = 'Error: Permission denied when accessing the port. Try running as administrator or change port permissions.';
+          } else {
+            errorMessage += ` ${errorOutput}`;
+          }
+
+          this.window.webContents.send(
+            'firmware-update-error',
+            errorMessage
+          );
+
+          resolve({
+            success: false,
+            error: errorMessage
+          });
+        }
+      });
+
+      flashProcess.on('error', (err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('Error spawning LoadP2 tool:', errorMsg);
+
+        this.window.webContents.send(
+          'firmware-update-error',
+          `Failed to run LoadP2 tool: ${errorMsg}`
+        );
+
+        resolve({
+          success: false,
+          error: `Failed to run LoadP2 tool: ${errorMsg}`
+        });
+      });
+    });
+  }
+
+  private async closeSerialPort(): Promise<void> {
+    // Check if there's an active serial port connection
+    if (this.serialport.getCurrentPath()) {
+      await this.serialport.disconnect();
+      this.sendProgressMessage('Disconnected serial port for firmware update');
+    }
+  }
+
+  private sendProgressMessage(message: string): void {
+    this.window.webContents.send('firmware-update-progress', message);
+  }
+
+  private cleanupTempDir(dirPath: string): void {
+    try {
+      if (fs.existsSync(dirPath)) {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        this.sendProgressMessage(`Cleaned up temporary files in ${dirPath}`);
+      }
+    } catch (error) {
+      console.error('Error cleaning up temp directory:', error);
+    }
   }
 }
 

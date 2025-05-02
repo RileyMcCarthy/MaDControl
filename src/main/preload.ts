@@ -2,7 +2,25 @@
 /* eslint no-unused-vars: off */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
-export type Channels = 'ipc-example';
+export type Channels =
+  | 'ipc-example'
+  | 'device-connect'
+  | 'device-list-ports'
+  | 'device-data-all'
+  | 'sample-data-latest'
+  | 'device-state'
+  | 'device-connected'
+  | 'get-machine-configuration'
+  | 'save-machine-configuration'
+  | 'set-motion-enabled'
+  | 'manual-move'
+  | 'home'
+  | 'set_length_zero'
+  | 'get-firmware-version'
+  | 'get-latest-firmware-version'
+  | 'update-firmware'
+  | 'firmware-update-progress'
+  | 'firmware-update-error';
 
 const electronHandler = {
   ipcRenderer: {

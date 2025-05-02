@@ -1,10 +1,32 @@
 import { BrowserWindow } from 'electron';
+import { Notification, NotificationType } from '../../shared/SharedInterface';
 
 class NotificationSender {
   private window: BrowserWindow;
 
   constructor(window: BrowserWindow) {
     this.window = window;
+  }
+
+  sendNotification(notification: Notification) {
+    console.log(`Notification (${notification.Type}):`, notification.Message);
+
+    switch (notification.Type) {
+      case NotificationType.ERROR:
+        this.sendError(notification.Message);
+        break;
+      case NotificationType.WARN:
+        this.sendWarning(notification.Message);
+        break;
+      case NotificationType.INFO:
+        this.sendInfo(notification.Message);
+        break;
+      case NotificationType.SUCCESS:
+        this.sendSuccess(notification.Message);
+        break;
+      default:
+        this.sendInfo(notification.Message);
+    }
   }
 
   sendError(notification: string) {

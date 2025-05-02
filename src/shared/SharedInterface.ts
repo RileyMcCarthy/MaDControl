@@ -61,6 +61,10 @@ export interface MachineConfiguration {
   'Tensile Force Max (N)': number;
 }
 
+export interface FirmwareVersion {
+  version: string;
+}
+
 export interface MoveParameters {
   position: number;
   velocity: number;

@@ -25,6 +25,7 @@ import DeviceHubIcon from '@mui/icons-material/DeviceHub';
 import LinkIcon from '@mui/icons-material/Link';
 import CircleIcon from '@mui/icons-material/Circle'; // Import CircleIcon for status indicator
 import CreateIcon from '@mui/icons-material/Create';
+import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 
 const drawerWidth = 240;
 
@@ -113,6 +114,7 @@ function SideBar({ children }: MiniDrawerProps) {
     '/create': 'Create',
     '/view': 'View',
     '/config': 'Machine Configuration',
+    '/firmware': 'Firmware Update',
     // Add more paths and names as needed
   };
   const currentPageName = pageNames[location.pathname] || 'Dashboard';
@@ -189,6 +191,7 @@ function SideBar({ children }: MiniDrawerProps) {
               path: '/config',
               icon: <DeviceHubIcon />,
             },
+            { text: 'Firmware Update', path: '/firmware', icon: <SystemUpdateAltIcon /> },
             { text: 'Settings', path: '/drafts', icon: <SettingsIcon /> },
           ].map((item, index) => (
             <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>

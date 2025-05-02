@@ -17,6 +17,7 @@ import Dashboard from './Dashboard';
 import Connect from './Connect';
 import MachineConfigPage from './MachineConfig';
 import TestProfileForm from './TestProfile';
+import FirmwareUpdate from './FirmwareUpdate';
 
 
 const darkTheme = createTheme({
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/connect" element={<Connect />} />
             <Route path="/config" element={<MachineConfigPage />} />
             <Route path="/create" element={<TestProfileForm />} />
+            <Route path="/firmware" element={<FirmwareUpdate />} />
           </Routes>
         </SideBar>
       </Router>

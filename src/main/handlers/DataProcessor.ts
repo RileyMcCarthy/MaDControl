@@ -9,6 +9,7 @@ export enum ReadType {
   SAMPLE,
   STATE,
   MACHINE_CONFIGURATION,
+  FIRMWARE_VERSION,
 }
 
 export enum WriteType {
@@ -20,6 +21,7 @@ export enum WriteType {
   SAMPLE_PROFILE,
   GAUGE_LENGTH,
   GAUGE_FORCE,
+  READ_FIRMWARE_VERSION,
 }
 
 enum MessageType {
