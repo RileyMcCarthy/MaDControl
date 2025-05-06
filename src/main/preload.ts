@@ -19,8 +19,10 @@ export type Channels =
   | 'get-firmware-version'
   | 'get-latest-firmware-version'
   | 'update-firmware'
+  | 'flash-from-file'
   | 'firmware-update-progress'
-  | 'firmware-update-error';
+  | 'firmware-update-error'
+  | 'device-responding';
 
 const electronHandler = {
   ipcRenderer: {

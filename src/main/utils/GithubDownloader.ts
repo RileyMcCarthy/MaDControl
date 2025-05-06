@@ -105,6 +105,23 @@ export async function getLatestRelease(repoPath: string): Promise<any> {
 
       function handleResponse(res: any) {
         if (res.statusCode !== 200) {
+          // Handle rate limiting specifically
+          if (res.statusCode === 403) {
+            const rateLimitRemaining = res.headers['x-ratelimit-remaining'];
+            const rateLimitReset = res.headers['x-ratelimit-reset'];
+
+            if (rateLimitRemaining === '0') {
+              // We're rate limited
+              const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000) : 'unknown time';
+              reject(new Error(`GitHub API rate limit exceeded. Limit will reset at ${resetTime}. Try again later or use a direct download URL.`));
+            } else {
+              // Some other 403 error
+              reject(new Error(`GitHub API request forbidden (403). This could be due to rate limiting or access restrictions.`));
+            }
+            return;
+          }
+
+          // Handle other status codes
           reject(new Error(`GitHub API request failed with status code: ${res.statusCode}`));
           return;
         }

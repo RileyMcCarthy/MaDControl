@@ -28,8 +28,10 @@ const FirmwareUpdate: React.FC = () => {
   const [firmwareVersion, setFirmwareVersion] = useState('');
   const [latestVersion, setLatestVersion] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
   const [needsUpdate, setNeedsUpdate] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
+  const [skipConnectionCheck, setSkipConnectionCheck] = useState(false);
 
   const steps = ['Connect Device', 'Check Version', 'Download & Flash'];
 
@@ -81,18 +83,29 @@ const FirmwareUpdate: React.FC = () => {
     // Check device connection status
     const checkConnection = async () => {
       try {
+        // Check if a serial port is connected
         const connected = await window.electron.ipcRenderer.invoke('device-connected');
         setIsConnected(connected);
-        if (connected) {
+
+        // Check if the device is responding to commands
+        const responding = await window.electron.ipcRenderer.invoke('device-responding');
+        setIsResponding(responding);
+
+        if (responding) {
           // Get current firmware version
           const version = await window.electron.ipcRenderer.invoke('get-firmware-version');
           setFirmwareVersion(version || 'Unknown');
 
-          // If connected, move to step 1
+          // If responding, move to step 1
           if (activeStep === 0) {
             setActiveStep(1);
           }
-        } else {
+        } else if (connected && !responding && activeStep === 0) {
+          // If connected but not responding, show the warning and allow proceeding
+          setActiveStep(0);
+        } else if (!skipConnectionCheck && !connected) {
+          // Only reset to step 0 if we're not skipping the connection check
+          // and no device is connected
           setActiveStep(0);
         }
       } catch (err) {
@@ -132,7 +145,7 @@ const FirmwareUpdate: React.FC = () => {
       progressListener();
       errorListener();
     };
-  }, [activeStep, firmwareVersion]);
+  }, [activeStep, firmwareVersion, skipConnectionCheck]);
 
   const handleFlashFirmware = async () => {
     try {
@@ -189,6 +202,9 @@ const FirmwareUpdate: React.FC = () => {
                   Connection: <strong>{isConnected ? 'Connected' : 'Disconnected'}</strong>
                 </Typography>
                 <Typography>
+                  Device: <strong>{isResponding ? 'Responding' : (isConnected ? 'Not Responding' : 'Disconnected')}</strong>
+                </Typography>
+                <Typography>
                   Current Firmware: <strong>{firmwareVersion}</strong>
                 </Typography>
                 <Typography>
@@ -227,9 +243,47 @@ const FirmwareUpdate: React.FC = () => {
             </Card>
 
             {activeStep === 0 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Please connect your device to proceed.
-              </Alert>
+              <>
+                {!isConnected ? (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    No serial port connected. Please connect to a port first.
+                  </Alert>
+                ) : !isResponding ? (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Device is connected but not responding. This is normal for a new device that needs firmware.
+                  </Alert>
+                ) : (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Device is connected and responding. Checking firmware version...
+                  </Alert>
+                )}
+
+                {isConnected && !isResponding && (
+                  <>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      onClick={() => {
+                        setSkipConnectionCheck(true);
+                        setActiveStep(2);
+                      }}
+                      sx={{ mt: 2, mb: 1 }}
+                    >
+                      Skip Version Check & Flash Now
+                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      Use this to flash a brand new device that isn't responding yet.
+                      Your serial port is connected but the device isn't responding.
+                    </Typography>
+                  </>
+                )}
+
+                {!isConnected && (
+                  <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                    You need to connect to a serial port before proceeding.
+                  </Typography>
+                )}
+              </>
             )}
 
             {activeStep === 1 && (
@@ -265,16 +319,56 @@ const FirmwareUpdate: React.FC = () => {
                 <Alert severity="warning" sx={{ mb: 2 }}>
                   Do not disconnect the device during firmware update!
                 </Alert>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<CloudDownloadIcon />}
-                  onClick={handleFlashFirmware}
-                  disabled={loading || !isConnected}
-                  sx={{ mt: 2 }}
-                >
-                  Download & Flash Firmware
-                </Button>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<CloudDownloadIcon />}
+                    onClick={handleFlashFirmware}
+                    disabled={loading || !isConnected}
+                  >
+                    Download & Flash Firmware
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<SystemUpdateAltIcon />}
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        setStatus('Selecting firmware file...');
+                        setError('');
+                        setLogs([]); // Clear previous logs
+
+                        // Add initial log
+                        setLogs(['Opening file selector...']);
+
+                        // Call the flash-from-file handler
+                        const result = await window.electron.ipcRenderer.invoke('flash-from-file');
+
+                        if (result.success) {
+                          setStatus('Firmware updated successfully from file!');
+                          // Move to step 3 (completed)
+                          setActiveStep(3);
+                        } else if (result.error === 'File selection was cancelled') {
+                          setStatus('File selection cancelled');
+                          setLogs((prevLogs) => [...prevLogs, 'File selection cancelled by user']);
+                        } else {
+                          setError(result.error || 'Unknown error occurred');
+                        }
+                      } catch (err) {
+                        console.error('Error updating firmware from file:', err);
+                        setError('Failed to update firmware from file. See console for details.');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading || !isConnected}
+                  >
+                    Flash from Local File
+                  </Button>
+                </Box>
               </>
             )}
 

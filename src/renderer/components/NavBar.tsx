@@ -23,9 +23,11 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import SourceIcon from '@mui/icons-material/Source';
 import DeviceHubIcon from '@mui/icons-material/DeviceHub';
 import LinkIcon from '@mui/icons-material/Link';
-import CircleIcon from '@mui/icons-material/Circle'; // Import CircleIcon for status indicator
 import CreateIcon from '@mui/icons-material/Create';
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 const drawerWidth = 240;
 
@@ -106,6 +108,7 @@ function SideBar({ children }: MiniDrawerProps) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false); // State to track connection status
+  const [isDeviceResponding, setIsDeviceResponding] = useState(false); // State to track device responding status
   const location = useLocation();
 
   const pageNames = {
@@ -127,19 +130,31 @@ function SideBar({ children }: MiniDrawerProps) {
     setOpen(false);
   };
 
-  useEffect(() => {
-    const fetchDeviceConnectedStatus = async () => {
-      try {
-        const connected = await window.electron.ipcRenderer.invoke('device-connected');
+  // This will fetch and update device status every 2 seconds
+  const checkConnection = async () => {
+    try {
+      // Check if a serial port is connected
+      const connected = await window.electron.ipcRenderer.invoke('device-connected');
+
+      // Check if device is responding
+      const responding = await window.electron.ipcRenderer.invoke('device-responding');
+
+      if (connected !== isConnected) {
         setIsConnected(connected);
-      } catch (error) {
-        console.error('Failed to fetch device connection status:', error);
       }
-    };
 
-    fetchDeviceConnectedStatus(); // Fetch immediately on load
+      if (responding !== isDeviceResponding) {
+        setIsDeviceResponding(responding);
+      }
+    } catch (error) {
+      console.error('Error checking connection status:', error);
+    }
+  };
 
-    const intervalId = setInterval(fetchDeviceConnectedStatus, 1000); // Poll every 1 second
+  useEffect(() => {
+    checkConnection(); // Fetch immediately on load
+
+    const intervalId = setInterval(checkConnection, 2000); // Poll every 2 seconds
 
     return () => {
       clearInterval(intervalId);
@@ -166,7 +181,46 @@ function SideBar({ children }: MiniDrawerProps) {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {currentPageName}
           </Typography>
-          <CircleIcon sx={{ color: isConnected ? 'green' : 'red' }} /> {/* Status indicator */}
+          <Typography variant="body2" color="text.secondary">
+            {isConnected ? (
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <CheckCircleOutlineIcon
+                  fontSize="small"
+                  color="success"
+                  sx={{ mr: 0.5 }}
+                />
+                Port Connected
+                {isDeviceResponding ? (
+                  <Box component="span" sx={{ ml: 1 }}>
+                    <CheckCircleIcon
+                      fontSize="small"
+                      color="success"
+                      sx={{ mr: 0.5 }}
+                    />
+                    Device Responding
+                  </Box>
+                ) : (
+                  <Box component="span" sx={{ ml: 1 }}>
+                    <ErrorOutlineIcon
+                      fontSize="small"
+                      color="warning"
+                      sx={{ mr: 0.5 }}
+                    />
+                    Device Not Responding
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <ErrorOutlineIcon
+                  fontSize="small"
+                  color="error"
+                  sx={{ mr: 0.5 }}
+                />
+                Not Connected
+              </Box>
+            )}
+          </Typography>
         </Toolbar>
       </AppBar>
       <Drawer variant="permanent" open={open}>
