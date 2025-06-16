@@ -2,7 +2,7 @@ import { TextField, Button, MenuItem, Box, Grid, Typography, Autocomplete } from
 import { useState, useEffect } from 'react';
 
 export default function Connect() {
-  const baudRates = [9600, 14400, 19200, 38400, 57600, 115200]; // Replace with your actual baud rates
+  const baudRates = [9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
   const [ports, setPorts] = useState<string[]>([]);
   const [responseMessage, setResponseMessage] = useState<string | null>(null);
 
@@ -72,7 +72,7 @@ export default function Connect() {
             select
             label="Baud Rate"
             name="baudRate"
-            defaultValue={115200} // Set default baud rate
+            defaultValue={230400} // Set default baud rate
             fullWidth
           >
             {baudRates.map((option) => (

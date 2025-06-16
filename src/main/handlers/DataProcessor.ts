@@ -132,8 +132,6 @@ class DataProcessor extends EventEmitter {
         break;
       default: {
         // Handle data + CRC
-        // hi riley tmrw, this doesnt really work for notifications...
-        // should think more or something about this
         const command = this.buf[MessageIndex.COMMAND] as ReadType;
         const type = this.buf[MessageIndex.TYPE] as ResponseType;
         const length =
